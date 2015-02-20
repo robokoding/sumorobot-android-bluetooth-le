@@ -5,11 +5,15 @@
     <feature name="App">
         <param name="android-package" value="org.apache.cordova.App" />
     </feature>
-    <feature name="Notification">
-        <param name="android-package" value="org.apache.cordova.dialogs.Notification" />
+    <feature name="Sumorobot">
+        <param name="android-package" value="com.robokoding.sumodroid.plugin.Sumorobot" />
+        <param name="onload" value="true" />
     </feature>
     <feature name="Globalization">
         <param name="android-package" value="org.apache.cordova.globalization.Globalization" />
+    </feature>
+    <feature name="Notification">
+        <param name="android-package" value="org.apache.cordova.dialogs.Notification" />
     </feature>
     <name>Sumodroid</name>
     <description>
@@ -43,8 +47,4 @@
     <gap:splash gap:platform="android" gap:qualifier="port-hdpi" src="res/screen/android/screen-hdpi-portrait.png" />
     <gap:splash gap:platform="android" gap:qualifier="port-xhdpi" src="res/screen/android/screen-xhdpi-portrait.png" />
     <access origin="*" />
-    <feature name="sumorobot">
-        <param name="android-package" value="com.robokoding.sumodroid.plugin.sumorobot" />
-        <param name="onload" value="true" />
-    </feature>
 </widget>
