@@ -7,5 +7,5 @@ phonegap run android
 ```
 
 # credits ^_^
-http://phonegap.com/ <br/>
+http://cordova.apache.org/ <br/>
 https://developers.google.com/blockly/
