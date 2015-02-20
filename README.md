@@ -5,7 +5,6 @@ Program your Sumorobot on your Android device with Google Blockly over Bluetooth
 
 # installing
 install Android SDK http://developer.android.com/sdk/index.html
-
 ```bash
 sudo apt-get install nodejs
 sudo npm install -g cordova
