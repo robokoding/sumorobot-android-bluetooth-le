@@ -32,8 +32,8 @@
     <gap:splash gap:platform="android" gap:qualifier="port-hdpi" src="res/screen/android/screen-hdpi-portrait.png" />
     <gap:splash gap:platform="android" gap:qualifier="port-xhdpi" src="res/screen/android/screen-xhdpi-portrait.png" />
     <access origin="*" />
-    <feature name="sumorobot">
-        <param name="android-package" value="com.robokoding.sumodroid.plugin.sumorobot" />
+    <feature name="Sumorobot">
+        <param name="android-package" value="com.robokoding.sumodroid.plugin.Sumorobot" />
         <param name="onload" value="true" />
     </feature>
 </widget>
