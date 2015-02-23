@@ -38,11 +38,12 @@ var app = {
                 }
 
                 var buttons = {
-                    "en": ["select your sumorobot"],
-                    "de": ["waelhe dein sumoroboter"],
-                    "et": ["vali oma sumorobot"]
+                    "en": ["select your sumorobot", "interactive mode"],
+                    "de": ["waelhe dein sumoroboter", "interaktiv modus"],
+                    "et": ["vali oma sumorobot", "interaktiivne moodus"]
                 };
                 document.getElementById('select').value = buttons[language][0];
+                document.getElementById('interactive').value = buttons[language][1];
 
                 /* load the language */
                 var script = document.createElement('script');
@@ -186,6 +187,10 @@ var app = {
     /* function to start sumorobot discovery */
     selectSumorobot: function() {
         app.pluginCallback("Sumorobot", "selectSumorobot", []);
+    },
+
+    triggerOrientationMovement: function() {
+        app.pluginCallback("Sumorobot", "triggerOrientationMovement", []);
     },
 
     /* function to make a asynchronous call to the plugins */

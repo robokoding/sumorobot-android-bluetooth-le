@@ -7,12 +7,17 @@ import android.util.Log;
 import android.content.Intent;
 import android.os.Environment;
 import android.app.AlertDialog;
+import android.hardware.Sensor;
+import android.content.Context;
+import android.hardware.SensorEvent;
+import android.hardware.SensorManager;
 import android.content.DialogInterface;
 import android.bluetooth.BluetoothGatt;
 import android.content.BroadcastReceiver;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothProfile;
+import android.hardware.SensorEventListener;
 import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattDescriptor;
@@ -29,9 +34,22 @@ import org.apache.cordova.CordovaInterface;
 /**
  * This class compiles Arduino code and sends it to the Sumorobot.
  */
-public class Sumorobot extends CordovaPlugin {
+public class Sumorobot extends CordovaPlugin implements SensorEventListener {
     /* app tag for log messages */
     private static final String TAG = "Sumorobot";
+    /* orientation stuff */
+    private float mRoll = 0.0f;
+    private float mPitch = 0.0f;
+    private float[] mLastAccels;
+    private float[] mLastMagFields;
+    private float mRollOffset = 0.0f;
+    private float mPitchOffset = 0.0f;
+    private String currentDirection = "stop";
+    private float[] mOrientation = new float[4];
+    private float[] mRotationMatrix = new float[16];
+    private boolean isOrientationMovementActivated = false;
+    private static final float ORIENTATION_ROLL_CHANGE_ANGLE = 10;
+    private static final float ORIENTATION_PITCH_CHANGE_ANGLE = 10;
     /* bluetooth stuff */
     private BluetoothGatt mBluetoothGatt;
     private static String incomingData = "";
@@ -90,12 +108,12 @@ public class Sumorobot extends CordovaPlugin {
     };
 
     private void dataUpdate(final BluetoothGattCharacteristic characteristic) {
-        // For all other profiles, writes the data formatted in HEX.
+        /* for all other profiles, writes the data formatted in HEX */
         final byte[] data = characteristic.getValue();
-        Log.d(TAG, "data" + characteristic.getValue());
+        //Log.d(TAG, "data" + characteristic.getValue());
 
         if (data != null && data.length > 0) {
-            // getting cut off when longer, need to push on new line, 0A
+            /* getting cut off when longer, need to push on new line, 0A */
             String received = String.format("%s", new String(data));
             /* when the data contains a response message */
             if (incomingData.contains("true")) {
@@ -155,6 +173,31 @@ public class Sumorobot extends CordovaPlugin {
         sumorobotAddress = address;
         mConnectionState = STATE_CONNECTING;
         return true;
+    }
+
+    private void sendData(String commands) {
+        Log.d(TAG, "sending commands: " + commands);
+
+        try {
+            int start = 0;
+            while (true) {
+                String packet = "";
+                if (commands.length() >= start + 20)
+                    packet = commands.substring(start, start + 20);
+                else
+                    packet = commands.substring(start, commands.length());
+                characteristicTX.setValue(packet);
+                writeCharacteristic(characteristicTX);
+                start += 20;
+                if (start >= commands.length())
+                    break;
+                /* a small delay before sending next packet */
+                Thread.sleep(1);
+            }
+            setCharacteristicNotification(characteristicRX, true);
+        } catch (Exception e) {
+            Log.d(TAG, "sending commands error: " + e.getMessage());
+        }
     }
 
     /**
@@ -251,12 +294,132 @@ public class Sumorobot extends CordovaPlugin {
                 Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
                 cordova.getActivity().startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
             }
-            /* cancel bluetooth discovery */
-            mBluetoothAdapter.cancelDiscovery();
+            /* register sensor listener */
+            registerSensorListener();
         } catch (Exception e) {
             Log.e(TAG, "bluetooth initialization error: " + e.getMessage());
         }
     }
+
+    /**
+     * Registers listeners for accelerometer and magnometer sensor
+     */
+    private void registerSensorListener() {
+        Log.d(TAG, "registered sensors listeners");
+        SensorManager sensorManager = (SensorManager) cordova.getActivity().getSystemService(Context.SENSOR_SERVICE);
+        sensorManager.registerListener(this, sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD), SensorManager.SENSOR_DELAY_NORMAL);
+        sensorManager.registerListener(this, sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER), SensorManager.SENSOR_DELAY_NORMAL);
+    }
+
+    /**
+     * Set accelerometer data
+     * @param event {@link SensorEvent}
+     */
+    private void accel(SensorEvent event) {
+        if (mLastAccels == null) {
+            mLastAccels = new float[3];
+        }
+ 
+        System.arraycopy(event.values, 0, mLastAccels, 0, 3);
+ 
+        /*if (m_lastMagFields != null) {
+            computeOrientation();
+        }*/
+    }
+
+    /**
+     * Set magnometer data
+     * @param event {@link SensorEvent}
+     */
+    private void mag(SensorEvent event) {
+        if (mLastMagFields == null) {
+            mLastMagFields = new float[3];
+        }
+
+        System.arraycopy(event.values, 0, mLastMagFields, 0, 3);
+
+        if (mLastAccels != null) {
+            computeOrientation();
+        }
+    }
+
+    /**
+     * Computes orientation of device
+     */
+    private void computeOrientation() {
+        if (SensorManager.getRotationMatrix(mRotationMatrix, null, mLastAccels, mLastMagFields)) {
+            SensorManager.getOrientation(mRotationMatrix, mOrientation); 
+            /* 1 radian = 57.2957795 degrees */
+            /* [0] : yaw, rotation around z axis
+             * [1] : pitch, rotation around x axis
+             * [2] : roll, rotation around y axis */
+            mPitch = mOrientation[1] * 57.2957795f;
+            mRoll = mOrientation[2] * 57.2957795f;
+
+            sendCommandOnDeviceOrientation( mPitch - mPitchOffset, mRoll - mRollOffset );
+        }
+    }
+
+    /**
+     * Sends a drive command depending on the current device orientation
+     * @param aPitch    {@link Float} device pitch in degree
+     * @param aRoll     {@link Float} device roll in degree
+     */
+    private synchronized void sendCommandOnDeviceOrientation(float aPitch, float aRoll) {
+        if (mConnectionState == STATE_CONNECTED && isOrientationMovementActivated) {
+            String id =  Long.toString((long) Math.floor(Math.random() * 9000000000L) + 1000000000L);
+            if (Math.abs(aPitch) > ORIENTATION_PITCH_CHANGE_ANGLE) {
+                /* check if to drive left or right */
+                if( aPitch > ORIENTATION_PITCH_CHANGE_ANGLE) {
+                    Log.d(TAG, "left");
+                    if (currentDirection != "left") {
+                        sendData("{\"cmd\":\"left\",\"arg\":\"\",\"id\":\""+id+"\"}\n");
+                        currentDirection = "left";
+                    }
+                } else {
+                    Log.d(TAG, "right");
+                    if (currentDirection != "right") {
+                        sendData("{\"cmd\":\"right\",\"arg\":\"\",\"id\":\""+id+"\"}\n");
+                        currentDirection = "right";
+                    }
+                }
+            } else if (Math.abs(aRoll) > ORIENTATION_ROLL_CHANGE_ANGLE) {
+                /* check if to drive forward or backward */
+                if (aRoll > ORIENTATION_ROLL_CHANGE_ANGLE) {
+                    Log.d(TAG, "forward");
+                    if (currentDirection != "forward") {
+                        sendData("{\"cmd\":\"forward\",\"arg\":\"\",\"id\":\""+id+"\"}\n");
+                        currentDirection = "forward";
+                    }
+                } else {
+                    Log.d(TAG, "backward");
+                    if (currentDirection != "backward") {
+                        sendData("{\"cmd\":\"backward\",\"arg\":\"\",\"id\":\""+id+"\"}\n");
+                        currentDirection = "backward";
+                    }
+                }
+            } else {
+                /* stop */
+                Log.d(TAG, "stop");
+                if (currentDirection != "stop") {
+                    sendData("{\"cmd\":\"stop\",\"arg\":\"\",\"id\":\""+id+"\"}\n");
+                    currentDirection = "stop";
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+        if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
+            accel(event);
+        } else if (event.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD) {
+            mag(event);
+        }
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {}
 
     private void selectBluetoothDevice() {
         Log.d(TAG, "showing bluetooth devices");
@@ -294,37 +457,21 @@ public class Sumorobot extends CordovaPlugin {
             new Thread(new Runnable() {
                 @Override
                 public void run() {
-                    try {
-                        /* send the commands to the Sumorobot */
-                        if (mConnectionState == STATE_CONNECTED) {
-                            Log.d(TAG, "sending commands: " + commands);
-                            int start = 0;
-                            while (true) {
-                                String packet = "";
-                                if (commands.length() >= start + 20)
-                                    packet = commands.substring(start, start + 20);
-                                else
-                                    packet = commands.substring(start, commands.length());
-                                characteristicTX.setValue(packet);
-                                writeCharacteristic(characteristicTX);
-                                start += 20;
-                                if (start >= commands.length())
-                                    break;
-                                /* a small delay before sending next packet */
-                                Thread.sleep(1);
-                            }
-                            setCharacteristicNotification(characteristicRX, true);
-                        }
-                    } catch (Exception e) {
-                        Log.d(TAG, "sending commands error: " + e.getMessage());
+                    /* send the commands to the sumorobot */
+                    if (mConnectionState == STATE_CONNECTED) {
+                        sendData(commands);
                     }
                 }
             }).start();
             callbackContext.success();
             return true;
         } else if (action.equals("selectSumorobot")) {
-            /* show dialog to select a bluetooth devices */
+            /* show dialog to select a bluetooth device */
             selectBluetoothDevice();
+            callbackContext.success();
+            return true;
+        } else if (action.equals("triggerOrientationMovement")) {
+            isOrientationMovementActivated = !isOrientationMovementActivated;
             callbackContext.success();
             return true;
         }
