@@ -1,7 +1,7 @@
 # sumorobot-android-bluetooth-le
 Program your Sumorobot on your Android device with Google Blockly over Bluetooth Low Energy
 
-<img src="https://lh6.googleusercontent.com/gZkU0Bwf5VMQ3dsdxUgayjztRLr1fAxKWqOwFNWYuhs=w1068-h600-no" alt="android" height="200px">
+<img src="https://lh3.googleusercontent.com/-BDt1BLu45js/VOxYFC8KQzI/AAAAAAAAOlE/s_gsMfzwGZU/w1467-h917-no/Screenshot_2015-02-24-11-51-09.png" alt="android" height="200px">
 
 # installing
 install Android SDK http://developer.android.com/sdk/index.html
