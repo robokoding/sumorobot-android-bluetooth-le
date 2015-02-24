@@ -39,7 +39,7 @@ var app = {
 
                 var buttons = {
                     "en": ["select your sumorobot"],
-                    "de": ["waelhe dein sumoroboter"],
+                    "de": ["waelhe deinen sumoroboter"],
                     "et": ["vali oma sumorobot"]
                 };
                 document.getElementById('select').value = buttons[language][0];
